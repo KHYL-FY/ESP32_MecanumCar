@@ -1,0 +1,14 @@
+# 统一换行符，避免 Windows/Unix 来回改
+* text=auto
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.md  text eol=lf
+*.cpp text eol=lf
+*.h   text eol=lf
+*.py  text eol=lf
+*.ini text eol=lf
