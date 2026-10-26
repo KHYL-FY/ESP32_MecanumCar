@@ -39,6 +39,7 @@
 #include "remote.h"
 #include "motor.h"
 #include "config.h"
+#include "battery.h"
 
 // ---------------- 可调参数 ----------------
 static const int      REMOTE_RX_PIN   = 16;
@@ -236,6 +237,10 @@ static void printHelp() {
   Serial.println(F("  k / K     输出上限 -10 / +10"));
   Serial.println(F("  i         转向极性翻转（拐弯方向反了按它）"));
   Serial.println(F("  u         平移极性翻转（左右横移反了按它）"));
+  Serial.println(F("  --- 电池电压监测（GPIO34，需分压电阻）---"));
+  Serial.println(F("  b         开关电压监测"));
+  Serial.println(F("  n / N     分压比 -0.1 / +0.1（10k+4.7k → 3.1）"));
+  Serial.println(F("  l / L     电压校准 -1% / +1%（对齐万用表）"));
   Serial.println(F("  ---"));
   Serial.println(F("  v         查看配置    d 恢复默认    p 打印说明"));
   Serial.println(F("------------------------------------------------------"));
@@ -303,6 +308,38 @@ static void handleSerial() {
                       cfg().strafeInv ? "左" : "右");
         break;
 
+      case 'b':
+      case 'B':
+        cfg().batEn = !cfg().batEn;
+        configSave();
+        Serial.printf("\n>>> 电压监测 = %s\n", cfg().batEn ? "开" : "关");
+        if (cfg().batEn && !batteryValid()) {
+          Serial.println(F("    读不到电压：检查 GPIO34 的分压电阻是否焊好，"));
+          Serial.println(F("    或用 n / N 核对分压比（10k+4.7k → 3.1）"));
+          Serial.println(F("    注意：不启用电量监测也不影响开车"));
+        }
+        break;
+
+      case 'n':
+        if (cfg().batDivX10 > 15) { cfg().batDivX10--; configSave(); }
+        Serial.printf("\n>>> 分压比 = %u.%u : 1\n",
+                      cfg().batDivX10 / 10, cfg().batDivX10 % 10);
+        break;
+      case 'N':
+        if (cfg().batDivX10 < 60) { cfg().batDivX10++; configSave(); }
+        Serial.printf("\n>>> 分压比 = %u.%u : 1\n",
+                      cfg().batDivX10 / 10, cfg().batDivX10 % 10);
+        break;
+
+      case 'l':
+        if (cfg().batTrim > 85) { cfg().batTrim--; configSave(); }
+        Serial.printf("\n>>> 电压校准 = %d%%\n", cfg().batTrim);
+        break;
+      case 'L':
+        if (cfg().batTrim < 115) { cfg().batTrim++; configSave(); }
+        Serial.printf("\n>>> 电压校准 = %d%%\n", cfg().batTrim);
+        break;
+
       case 'v':
       case 'V':
         configPrint();
@@ -344,16 +381,51 @@ static void printStatus(uint32_t now, bool alive, bool busy) {
 
   const char *state = busy ? "标定" : (!alive ? "断开" : (g_armedGate || s.lb ? "驱动" : "锁定"));
 
-  Serial.printf("%-4s|%+4d%+4d%+4d%+4d|%+5d%+5d%+5d%+5d|%5lums\n",
+  char bat[12];
+  if (cfg().batEn && batteryValid()) {
+    snprintf(bat, sizeof(bat), "%4.2fV", batteryVolts());
+  } else {
+    snprintf(bat, sizeof(bat), "  --  ");
+  }
+
+  Serial.printf("%-4s|%+4d%+4d%+4d%+4d|%+5d%+5d%+5d%+5d|%5lums|%s %s\n",
                 state,
                 remoteToPercent(s.lx), remoteToPercent(s.ly),
                 remoteToPercent(s.rx), remoteToPercent(s.ry),
                 motorOutput(MOTOR_LF), motorOutput(MOTOR_RF),
                 motorOutput(MOTOR_LR), motorOutput(MOTOR_RR),
-                (unsigned long)remoteAgeMs() > 99999UL ? 99999UL : (unsigned long)remoteAgeMs());
+                (unsigned long)remoteAgeMs() > 99999UL ? 99999UL : (unsigned long)remoteAgeMs(),
+                bat, batteryLabel());
 }
 
 // ---------------- 主流程 ----------------
+
+// 电压报警：只在状态变化时提示一次，避免刷屏
+static void batteryWarn(uint32_t now) {
+  if (!cfg().batEn) return;
+
+  static BatteryState lastState = BAT_OK;
+  static uint32_t lastMs = 0;
+
+  const BatteryState st = batteryState();
+  if (st == lastState && now - lastMs < 5000) return;
+  if (st == BAT_OK && lastState == BAT_OK) return;
+  if (st == BAT_LOW && lastState == BAT_LOW && now - lastMs < 15000) return;
+
+  lastState = st;
+  lastMs = now;
+
+  if (st == BAT_LOW) {
+    Serial.printf("\n>>> 电池偏低 %.2fV（%.2fV/节）—— 该准备充电了\n",
+                  batteryVolts(), batteryCellVolts());
+  } else if (st == BAT_CRITICAL) {
+    Serial.printf("\n>>> 电池 %.2fV 已经过低（%.2fV/节）！电机已强制断电\n",
+                  batteryVolts(), batteryCellVolts());
+    Serial.println(F("    2S 锂电放到 6.0V 以下会永久损坏，请立刻停车充电"));
+  } else {
+    Serial.printf("\n>>> 电池电压恢复正常 %.2fV\n", batteryVolts());
+  }
+}
 
 void setup() {
   Serial.begin(115200);
@@ -363,6 +435,7 @@ void setup() {
   motorBegin();
   motorStopAllNow();
 
+  batteryBegin();
   remoteBegin(REMOTE_RX_PIN);
 
   Serial.println();
@@ -377,24 +450,30 @@ void setup() {
   configPrint();
   printHelp();
   Serial.println();
-  Serial.println(F("状态 | 摇杆 LX LY RX RY | 四轮输出 LF RF LR RR | 数据龄"));
+  Serial.println(F("状态 | 摇杆 LX LY RX RY | 四轮输出 LF RF LR RR | 数据龄 | 电池"));
 }
 
 void loop() {
   handleSerial();
   remotePoll();
+  batteryPoll();
 
   const uint32_t now = millis();
 
   tickTest(now);
   tickSeq(now);
+  batteryWarn(now);
 
   const bool busy = g_testActive || g_seqStep >= 0;
   const GamepadState &s = remoteState();
   const bool alive = remoteAlive(LOST_TIMEOUT_MS);
+  const BatteryState bat = batteryState();
 
   if (busy) {
     // 标定过程中遥控不参与，避免手一碰摇杆把车开跑
+  } else if (bat == BAT_CRITICAL) {
+    // 过放保护：电压已经到危险线，直接断电压车，避免损坏电池
+    motorStopAllNow();
   } else if (!alive) {
     // 失控保护：手柄丢了立刻断电停车
     motorStopAllNow();

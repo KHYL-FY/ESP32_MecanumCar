@@ -22,6 +22,9 @@ void applyDefaults() {
   g_settings.rotScale = 100;  // 原地转不降额
   g_settings.rotInv = true;   // 右摇杆右打 = 顺时针（符合直觉）
   g_settings.strafeInv = false;
+  g_settings.batEn = false;   // 默认关闭：没焊分压电阻时别误报
+  g_settings.batDivX10 = 31;  // 10k + 4.7k（或 100k + 47k）
+  g_settings.batTrim = 100;   // 校准系数
 }
 
 // NVS 里的垃圾数据（比如手滑写进了 0）在这里兜住
@@ -34,6 +37,10 @@ void sanitize() {
   if (g_settings.yawTrim > 30) g_settings.yawTrim = 30;
   if (g_settings.rotScale < 40) g_settings.rotScale = 40;
   if (g_settings.rotScale > 100) g_settings.rotScale = 100;
+  if (g_settings.batDivX10 < 15) g_settings.batDivX10 = 15;
+  if (g_settings.batDivX10 > 60) g_settings.batDivX10 = 60;
+  if (g_settings.batTrim < 85) g_settings.batTrim = 85;
+  if (g_settings.batTrim > 115) g_settings.batTrim = 115;
   // 最小占空比不能超过输出上限，否则一动就是满速
   if (g_settings.minDuty > g_settings.maxDuty) g_settings.minDuty = g_settings.maxDuty;
 }
@@ -56,6 +63,9 @@ void configBegin() {
   g_settings.yawTrim  = g_prefs.getChar("yawTrim",   g_settings.yawTrim);
   g_settings.rotInv   = g_prefs.getBool("rotInv",    g_settings.rotInv);
   g_settings.strafeInv = g_prefs.getBool("strafeInv", g_settings.strafeInv);
+  g_settings.batEn     = g_prefs.getBool("batEn",     g_settings.batEn);
+  g_settings.batDivX10 = g_prefs.getUChar("batDiv",   g_settings.batDivX10);
+  g_settings.batTrim   = g_prefs.getChar("batTrim",   g_settings.batTrim);
 
   for (int i = 0; i < WHEEL_COUNT; i++) {
     char key[6];
@@ -85,6 +95,9 @@ void configSave() {
   g_prefs.putChar("yawTrim",   g_settings.yawTrim);
   g_prefs.putBool("rotInv",    g_settings.rotInv);
   g_prefs.putBool("strafeInv", g_settings.strafeInv);
+  g_prefs.putBool("batEn",     g_settings.batEn);
+  g_prefs.putUChar("batDiv",   g_settings.batDivX10);
+  g_prefs.putChar("batTrim",   g_settings.batTrim);
 
   for (int i = 0; i < WHEEL_COUNT; i++) {
     char key[6];
@@ -120,5 +133,10 @@ void configPrint() {
                 cfg().rotInv ? "正常" : "已反向");
   Serial.printf("  平移极性   = %s（u 切换，右打=向右才对）\n",
                 cfg().strafeInv ? "已反向" : "正常");
+  Serial.printf("  电压监测   = %s（b 开关，GPIO 34）\n",
+                cfg().batEn ? "开" : "关");
+  Serial.printf("  分压比     = %u.%u : 1（n/N 调）\n",
+                cfg().batDivX10 / 10, cfg().batDivX10 % 10);
+  Serial.printf("  电压校准   = %d%%（l/L 调，对齐万用表读数）\n", cfg().batTrim);
   Serial.println(F("------------------"));
 }
