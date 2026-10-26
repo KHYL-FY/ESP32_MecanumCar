@@ -3,7 +3,7 @@
 [![build](https://github.com/KHYL-FY/ESP32_MecanumCar/actions/workflows/build.yml/badge.svg)](https://github.com/KHYL-FY/ESP32_MecanumCar/actions/workflows/build.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-本文案由AI书写
+本文案由AI书写,作者是一位普通大学生,了解到麦克纳姆轮这种神奇的结构,产生了兴趣,于是脑子一热就做了这个小车.如果你也是第一次制作麦克纳姆轮小车看到了这里,我制作时所有需要的东西都写进这里了,可以当个参考,祝你好运!
 
 用 **ESP32 + 两片 TB6612FNG** 驱动的四轮麦克纳姆轮小车，**蓝牙手柄遥控**，可以实现
 前进 / 后退 / 左右横移 / 原地旋转 四种全向运动。
