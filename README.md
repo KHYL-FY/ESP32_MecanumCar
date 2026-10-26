@@ -3,6 +3,8 @@
 [![build](https://github.com/KHYL-FY/ESP32_MecanumCar/actions/workflows/build.yml/badge.svg)](https://github.com/KHYL-FY/ESP32_MecanumCar/actions/workflows/build.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+本文案由AI书写
+
 用 **ESP32 + 两片 TB6612FNG** 驱动的四轮麦克纳姆轮小车，**蓝牙手柄遥控**，可以实现
 前进 / 后退 / 左右横移 / 原地旋转 四种全向运动。
 
