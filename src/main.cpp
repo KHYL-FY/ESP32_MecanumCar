@@ -40,6 +40,7 @@
 #include "motor.h"
 #include "config.h"
 #include "battery.h"
+#include "diag.h"
 
 // ---------------- 可调参数 ----------------
 static const int      REMOTE_RX_PIN   = 16;
@@ -241,6 +242,8 @@ static void printHelp() {
   Serial.println(F("  b         开关电压监测"));
   Serial.println(F("  n / N     分压比 -0.1 / +0.1（10k+4.7k → 3.1）"));
   Serial.println(F("  l / L     电压校准 -1% / +1%（对齐万用表）"));
+  Serial.println(F("  --- 诊断 ---"));
+  Serial.println(F("  g         打印事件日志（手柄断连/过放/急停）"));
   Serial.println(F("  ---"));
   Serial.println(F("  v         查看配置    d 恢复默认    p 打印说明"));
   Serial.println(F("------------------------------------------------------"));
@@ -340,6 +343,11 @@ static void handleSerial() {
         Serial.printf("\n>>> 电压校准 = %d%%\n", cfg().batTrim);
         break;
 
+      case 'g':
+      case 'G':
+        diagPrint();
+        break;
+
       case 'v':
       case 'V':
         configPrint();
@@ -436,6 +444,7 @@ void setup() {
   motorStopAllNow();
 
   batteryBegin();
+  diagBegin();
   remoteBegin(REMOTE_RX_PIN);
 
   Serial.println();
@@ -468,6 +477,24 @@ void loop() {
   const GamepadState &s = remoteState();
   const bool alive = remoteAlive(LOST_TIMEOUT_MS);
   const BatteryState bat = batteryState();
+
+  // ---- 链路中断记录：把"断了多久"记下来，事后用 g 查看 ----
+  static bool    wasAlive = true;
+  static uint32_t lostAtMs = 0;
+  if (!alive && wasAlive) {
+    lostAtMs = now;
+  } else if (alive && !wasAlive) {
+    const uint32_t gap = now - lostAtMs;
+    if (gap >= 400) diagLinkLost(gap);   // 400ms 以下的抖动不记，太多了
+  }
+  wasAlive = alive;
+
+  // ---- 过放保护：只在刚触发的瞬间记一次，避免刷屏 ----
+  static BatteryState lastBat = BAT_OK;
+  if (bat == BAT_CRITICAL && lastBat != BAT_CRITICAL) {
+    diagBatteryCritical(batteryVolts());
+  }
+  lastBat = bat;
 
   if (busy) {
     // 标定过程中遥控不参与，避免手一碰摇杆把车开跑
@@ -515,5 +542,12 @@ void loop() {
   }
 
   motorUpdate();  // 推进软启动斜坡（每圈都要调）
+
+  // 记录"行驶中的最低电压"（判断电池是不是被瞬间拉垮）
+  {
+    const bool driving = !busy && alive && (s.lb || g_armedGate);
+    diagSampleBattery(batteryVolts(), driving);
+  }
+
   printStatus(now, alive, busy);
 }
