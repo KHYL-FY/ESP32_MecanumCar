@@ -439,6 +439,8 @@ void setup() {
   Serial.begin(115200);
   delay(1200);
 
+  diagBootBegin();   // 最先打印：开机次数 + 上次复位原因（判断是不是被电机拉垮复位的）
+
   configBegin();
   motorBegin();
   motorStopAllNow();

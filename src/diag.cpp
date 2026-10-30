@@ -7,6 +7,9 @@
 #include "diag.h"
 #include "battery.h"
 
+#include <Preferences.h>
+#include <esp_system.h>
+
 namespace {
 
 const uint8_t kMaxEvents = 8;
@@ -50,6 +53,52 @@ void push(uint8_t code, uint32_t aux) {
 }
 
 }  // namespace
+
+void diagBootBegin() {
+  // 开机次数 + 欠压复位次数，都存 NVS（开机才写一次，不伤闪存）
+  Preferences prefs;
+  const bool ok = prefs.begin("diag", false);
+
+  uint32_t boots = 1;
+  uint32_t brownouts = 0;
+  if (ok) {
+    boots = prefs.getUInt("boots", 0) + 1;
+    brownouts = prefs.getUInt("brownouts", 0);
+    prefs.putUInt("boots", boots);
+  }
+
+  const esp_reset_reason_t r = esp_reset_reason();
+  const char *name = "未知";
+  switch (r) {
+    case ESP_RST_POWERON:   name = "上电"; break;
+    case ESP_RST_EXT:       name = "复位脚"; break;
+    case ESP_RST_SW:        name = "软件复位"; break;
+    case ESP_RST_PANIC:     name = "程序崩溃"; break;
+    case ESP_RST_INT_WDT:   name = "中断看门狗"; break;
+    case ESP_RST_TASK_WDT:  name = "任务看门狗"; break;
+    case ESP_RST_WDT:       name = "看门狗"; break;
+    case ESP_RST_DEEPSLEEP: name = "深睡唤醒"; break;
+    case ESP_RST_BROWNOUT:  name = "【电压跌落】"; break;
+    case ESP_RST_SDIO:      name = "SDIO"; break;
+    default: break;
+  }
+
+  if (r == ESP_RST_BROWNOUT) {
+    brownouts++;
+    if (ok) prefs.putUInt("brownouts", brownouts);
+  }
+  if (ok) prefs.end();
+
+  Serial.printf(F("[开机] 第 %lu 次；上次复位原因：%s\n"),
+                (unsigned long)boots, name);
+  if (brownouts > 0) {
+    Serial.printf(F("[开机] 累计欠压复位 %lu 次\n"), (unsigned long)brownouts);
+  }
+  if (r == ESP_RST_BROWNOUT) {
+    Serial.println(F("       ↑ 这是「电机启动把 5V 拉垮」的直接证据，"));
+    Serial.println(F("         不是代码问题：查电池电压 / 5V 线径 / 加电容 / 降输出上限"));
+  }
+}
 
 void diagBegin() {
   g_count = 0;
