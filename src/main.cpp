@@ -236,6 +236,7 @@ static void printHelp() {
   Serial.println(F("  z / Z     偏航修正  -1 / +1（前进跑偏用）"));
   Serial.println(F("  y / Y     转向力度  -5 / +5"));
   Serial.println(F("  k / K     输出上限 -10 / +10"));
+  Serial.println(F("  o / O     加速斜坡 -1 / +1（越小越缓，防欠压）"));
   Serial.println(F("  i         转向极性翻转（拐弯方向反了按它）"));
   Serial.println(F("  u         平移极性翻转（左右横移反了按它）"));
   Serial.println(F("  --- 电池电压监测（GPIO34，需分压电阻）---"));
@@ -342,6 +343,18 @@ static void handleSerial() {
       case 'L':
         if (cfg().batTrim < 115) { cfg().batTrim++; configSave(); }
         Serial.printf("\n>>> 电压校准 = %d%%\n", cfg().batTrim);
+        break;
+
+      // 加速斜坡：越小越缓，启动浪涌越小（电机拖垮 5V 母线时先降这个）
+      case 'o':
+        if (cfg().rampStep > 1) { cfg().rampStep--; configSave(); }
+        Serial.printf("\n>>> 加速斜坡 = %u / 5ms（越小越缓，满速需要 %ums）\n",
+                      cfg().rampStep, (unsigned)(255 / cfg().rampStep * 5));
+        break;
+      case 'O':
+        if (cfg().rampStep < 30) { cfg().rampStep++; configSave(); }
+        Serial.printf("\n>>> 加速斜坡 = %u / 5ms（越小越缓，满速需要 %ums）\n",
+                      cfg().rampStep, (unsigned)(255 / cfg().rampStep * 5));
         break;
 
       case 'g':
