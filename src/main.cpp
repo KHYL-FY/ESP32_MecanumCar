@@ -243,7 +243,8 @@ static void printHelp() {
   Serial.println(F("  n / N     分压比 -0.1 / +0.1（10k+4.7k → 3.1）"));
   Serial.println(F("  l / L     电压校准 -1% / +1%（对齐万用表）"));
   Serial.println(F("  --- 诊断 ---"));
-  Serial.println(F("  g         打印事件日志（手柄断连/过放/急停）"));
+  Serial.println(F("  g         打印事件日志（可反复看，不清空）"));
+  Serial.println(F("  G         清空事件日志（开机次数不受影响）"));
   Serial.println(F("  ---"));
   Serial.println(F("  v         查看配置    d 恢复默认    p 打印说明"));
   Serial.println(F("------------------------------------------------------"));
@@ -344,8 +345,10 @@ static void handleSerial() {
         break;
 
       case 'g':
+        diagPrint();   // 只打印，不清空（可反复看）
+        break;
       case 'G':
-        diagPrint();
+        diagClear();   // 大写 G 才清空
         break;
 
       case 'v':

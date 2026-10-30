@@ -169,7 +169,10 @@ void diagPrint() {
     Serial.println(F("  行驶中最低电压 = --（没启用电压监测时测不到）"));
   }
   Serial.println(F("-----------------"));
-  Serial.println(F("（打 g 会清空日志）"));
+  Serial.println(F("（可以反复按 g 查看；要清空按大写 G）"));
+}
 
+void diagClear() {
   diagBegin();
+  Serial.println(F("\n>>> 事件日志已清空（开机次数和复位原因不受影响）"));
 }

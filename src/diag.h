@@ -42,5 +42,8 @@ void diagEstop();
 // 每圈调用：跟踪"行驶中的最低电压"，用来判断电池是不是被拉垮
 void diagSampleBattery(float volts, bool armed);
 
-// 打印统计并清空
+// 打印统计（不清空，可以反复看）
 void diagPrint();
+
+// 清空 RAM 里的日志和统计（不影响 NVS 里的开机次数 / 复位原因）
+void diagClear();
